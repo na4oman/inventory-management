@@ -1,0 +1,51 @@
+# Inventory Management App - Mobile Parts
+
+## Planning
+- [/] Create comprehensive implementation plan
+- [ ] Get user approval on plan
+
+## Phase 1: Project Setup & Auth
+- [ ] Initialize Next.js project with App Router
+- [ ] Install dependencies (Supabase, Clerk, UI libraries)
+- [ ] Configure Clerk authentication
+- [ ] Configure Supabase client
+- [ ] Create login/auth screens
+- [ ] Set up protected routes middleware
+
+## Phase 2: Database Schema & Supabase Setup
+- [ ] Create `products` table
+- [ ] Create `clients` table
+- [ ] Create `orders` table
+- [ ] Create `order_items` table
+- [ ] Create `sales` table
+- [ ] Create `sale_items` table
+- [ ] Set up Row Level Security (RLS) policies
+
+## Phase 3: Dashboard & Product Management
+- [ ] Build dashboard layout (sidebar, header, main content)
+- [ ] Create products table with search, filter, sort, pagination
+- [ ] Create add/edit product form (single product)
+- [ ] Create Excel import functionality (bulk upload)
+- [ ] Inventory overview cards (total qty, booked, available)
+
+## Phase 4: Orders & Bookings
+- [ ] Create clients management
+- [ ] Create order/booking flow (select products, assign to client)
+- [ ] Orders list view with status management
+- [ ] Adjust inventory levels on booking (booked qty)
+
+## Phase 5: Sales & Inventory Adjustment
+- [ ] Convert orders to sales
+- [ ] Deduct inventory on sale completion
+- [ ] Sales history view
+
+## Phase 6: Analytics & Reporting
+- [ ] Revenue & profit dashboard
+- [ ] Most sold items chart
+- [ ] Sales trends over time
+- [ ] Inventory value overview
+
+## Phase 7: Polish & Verification
+- [ ] Responsive design review
+- [ ] End-to-end testing via browser
+- [ ] Final walkthrough
