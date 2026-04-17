@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(createErrorResponse(error.message), { status: 500 });
     }
 
-    return NextResponse.json(createSuccessResponse(data as CustomerPriceWithDetails[]));
+    return NextResponse.json(createSuccessResponse(data as unknown as CustomerPriceWithDetails[]));
   } catch (error) {
     console.error('Error fetching customer prices:', error);
     return NextResponse.json(createErrorResponse('Failed to fetch customer prices'), { status: 500 });
