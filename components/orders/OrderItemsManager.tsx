@@ -41,7 +41,7 @@ export function OrderItemsManager({
     }
   };
 
-  const pendingQty = (item: OrderItem) => item.ordered_qty - item.shipped_qty;
+  const pendingQty = (item: OrderItem) => item.ordered_qty - (item.shipped_qty ?? 0);
 
   return (
     <div className="space-y-4">
