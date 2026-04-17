@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createProductSchema } from '@/lib/validations/product';
@@ -9,13 +9,40 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, Plus } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { useCreateInventoryLot } from '@/lib/hooks/useInventoryLots';
+import { useToast } from '@/components/shared/Toast';
 
 interface ProductFormProps {
   product?: Product;
   onSubmit: (data: any) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+}
+
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+
+interface LotFormState {
+  quantity: string;
+  cost_price: string;
+  arrival_date: string;
+  notes: string;
+}
+
+interface LotFormErrors {
+  quantity?: string;
+  cost_price?: string;
+  arrival_date?: string;
 }
 
 export function ProductForm({
@@ -28,7 +55,7 @@ export function ProductForm({
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting, isDirty },
+    formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(createProductSchema),
     mode: 'onBlur',
@@ -44,7 +71,6 @@ export function ProductForm({
     },
   });
 
-  // Update form when product data loads
   useEffect(() => {
     if (product) {
       reset({
@@ -60,9 +86,60 @@ export function ProductForm({
     }
   }, [product, reset]);
 
+  const [lotModalOpen, setLotModalOpen] = useState(false);
+  const [lotForm, setLotForm] = useState<LotFormState>({
+    quantity: '',
+    cost_price: '',
+    arrival_date: todayISO(),
+    notes: '',
+  });
+  const [lotErrors, setLotErrors] = useState<LotFormErrors>({});
+  const createLot = useCreateInventoryLot();
+  const toast = useToast();
+
+  const openLotModal = () => {
+    setLotForm({ quantity: '', cost_price: '', arrival_date: todayISO(), notes: '' });
+    setLotErrors({});
+    setLotModalOpen(true);
+  };
+
+  const validateLotForm = (): boolean => {
+    const errs: LotFormErrors = {};
+    const qty = parseFloat(lotForm.quantity);
+    const cp = parseFloat(lotForm.cost_price);
+    if (!lotForm.quantity || isNaN(qty) || qty <= 0) {
+      errs.quantity = 'Quantity must be greater than 0';
+    }
+    if (lotForm.cost_price === '' || isNaN(cp) || cp < 0) {
+      errs.cost_price = 'Cost price must be 0 or greater';
+    }
+    if (!lotForm.arrival_date) {
+      errs.arrival_date = 'Arrival date is required';
+    }
+    setLotErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleLotSubmit = async () => {
+    if (!product?.id || !validateLotForm()) return;
+    try {
+      await createLot.mutateAsync({
+        product_id: product.id,
+        quantity: parseFloat(lotForm.quantity),
+        cost_price: parseFloat(lotForm.cost_price),
+        arrival_date: lotForm.arrival_date,
+        notes: lotForm.notes || undefined,
+      });
+      setLotModalOpen(false);
+      toast.showSuccess('Stock added', 'Inventory lot created successfully.');
+    } catch (error) {
+      toast.showError('Error', error instanceof Error ? error.message : 'Failed to create lot');
+    }
+  };
+
   const isFormLoading = isLoading || isSubmitting;
 
-  const renderFieldError = (fieldName: string, error: any) => {
+  const renderFieldError = (_fieldName: string, error: any) => {
     if (!error) return null;
     return (
       <div className="mt-1 flex items-start gap-2 rounded-md bg-red-50 p-2">
@@ -171,17 +248,30 @@ export function ProductForm({
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div>
             <Label htmlFor="qty" className="mb-2 font-semibold block">Quantity</Label>
-            <Input
-              id="qty"
-              type="number"
-              placeholder="0"
-              {...register('qty', { valueAsNumber: true })}
-              disabled={isFormLoading}
-              className={errors.qty ? 'border-red-500 focus:border-red-500' : ''}
-              aria-invalid={!!errors.qty}
-              aria-describedby={errors.qty ? 'qty-error' : undefined}
-            />
-            {renderFieldError('qty', errors.qty)}
+            <div className="flex items-center gap-2">
+              <Input
+                id="qty"
+                type="number"
+                value={product?.qty ?? 0}
+                readOnly
+                disabled
+                className="bg-gray-50 cursor-not-allowed text-gray-500"
+                aria-label="Current quantity (read-only)"
+              />
+              {product?.id && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={openLotModal}
+                  disabled={isFormLoading}
+                  className="whitespace-nowrap flex items-center gap-1"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Free Stock
+                </Button>
+              )}
+            </div>
           </div>
 
           <div>
@@ -238,6 +328,91 @@ export function ProductForm({
           </Button>
         </div>
       </form>
+
+      {/* Add Free Stock Modal */}
+      <Dialog open={lotModalOpen} onOpenChange={setLotModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Free Stock</DialogTitle>
+            <DialogDescription>
+              Create a new inventory lot for this product
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="lot_quantity">Quantity *</Label>
+              <Input
+                id="lot_quantity"
+                type="number"
+                placeholder="Enter quantity"
+                value={lotForm.quantity}
+                onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })}
+                disabled={createLot.isPending}
+              />
+              {lotErrors.quantity && (
+                <p className="text-sm text-red-600 mt-1">{lotErrors.quantity}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="lot_cost_price">Cost Price (€) *</Label>
+              <Input
+                id="lot_cost_price"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={lotForm.cost_price}
+                onChange={(e) => setLotForm({ ...lotForm, cost_price: e.target.value })}
+                disabled={createLot.isPending}
+              />
+              {lotErrors.cost_price && (
+                <p className="text-sm text-red-600 mt-1">{lotErrors.cost_price}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="lot_arrival_date">Arrival Date *</Label>
+              <Input
+                id="lot_arrival_date"
+                type="date"
+                value={lotForm.arrival_date}
+                onChange={(e) => setLotForm({ ...lotForm, arrival_date: e.target.value })}
+                disabled={createLot.isPending}
+              />
+              {lotErrors.arrival_date && (
+                <p className="text-sm text-red-600 mt-1">{lotErrors.arrival_date}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="lot_notes">Notes</Label>
+              <textarea
+                id="lot_notes"
+                placeholder="Optional notes"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                rows={3}
+                value={lotForm.notes}
+                onChange={(e) => setLotForm({ ...lotForm, notes: e.target.value })}
+                disabled={createLot.isPending}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLotModalOpen(false)}
+              disabled={createLot.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleLotSubmit} disabled={createLot.isPending}>
+              {createLot.isPending ? 'Creating...' : 'Create Lot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

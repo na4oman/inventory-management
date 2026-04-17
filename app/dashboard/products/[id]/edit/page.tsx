@@ -2,6 +2,7 @@
 
 import { useRouter, useParams } from 'next/navigation';
 import { ProductForm } from '@/components/products/ProductForm';
+import { ProductLotsTable } from '@/components/products/ProductLotsTable';
 import { useProduct, useUpdateProduct } from '@/lib/hooks/useProducts';
 import { useToast } from '@/components/shared/Toast';
 import { CreateProductInput } from '@/lib/validations/product';
@@ -60,6 +61,11 @@ export default function EditProductPage() {
         onCancel={() => router.back()}
         isLoading={updateProduct.isPending}
       />
+
+      <div className="space-y-3">
+        <h2 className="text-xl font-semibold">Inventory Lots</h2>
+        <ProductLotsTable productId={productId} />
+      </div>
     </div>
   );
 }

@@ -260,9 +260,21 @@ export async function POST(request: NextRequest) {
       const product = productMap.get(item.product_id);
       const quantity = item.quantity;
       const unitPrice = item.unit_price;
-      const unitCost = product.cost_price;
       const subtotal = quantity * unitPrice;
-      const costTotal = quantity * unitCost;
+
+      // For free-stock items, compute cost from lot allocations; otherwise use product cost_price
+      let costTotal: number;
+      let unitCost: number;
+      if (item.source === 'free_stock') {
+        costTotal = (item.lot_allocations as any[]).reduce(
+          (sum: number, alloc: any) => sum + alloc.quantity * alloc.cost_price, 0
+        );
+        unitCost = quantity > 0 ? costTotal / quantity : 0;
+      } else {
+        unitCost = product.cost_price;
+        costTotal = quantity * unitCost;
+      }
+
       const profit = subtotal - costTotal;
 
       // For free stock items, check for pending orders to fulfill first
@@ -361,29 +373,32 @@ export async function POST(request: NextRequest) {
         saleItemData.order_item_id = item.order_item_id;
       }
 
-      const { error: saleItemError } = await supabase
+      const { data: saleItem, error: saleItemError } = await supabase
         .from('sale_items')
-        .insert(saleItemData);
+        .insert(saleItemData)
+        .select()
+        .single();
 
-      if (saleItemError) {
+      if (saleItemError || !saleItem) {
         return NextResponse.json(
           createErrorResponse('Failed to create sale item'),
           { status: 500 }
         );
       }
 
-      // Deduct inventory from products table only for free stock
+      // For free-stock items, call process_lot_sale RPC to handle lot deduction and qty sync
       if (item.source === 'free_stock') {
-        const { error: deductError } = await supabase
-          .from('products')
-          .update({ qty: Math.max(0, product.qty - quantity) })
-          .eq('id', product.id);
-
-        if (deductError) {
-          console.error('Failed to deduct inventory:', deductError);
+        const { error: rpcError } = await supabase.rpc('process_lot_sale', {
+          p_sale_item_id: saleItem.id,
+          p_allocations: (item.lot_allocations as any[]).map((a: any) => ({
+            lot_id: a.lot_id,
+            quantity: a.quantity,
+          })),
+        });
+        if (rpcError) {
           return NextResponse.json(
-            createErrorResponse('Failed to deduct inventory'),
-            { status: 500 }
+            createErrorResponse(rpcError.message),
+            { status: 400 }
           );
         }
       }

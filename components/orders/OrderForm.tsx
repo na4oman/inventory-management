@@ -1,16 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createOrderSchema } from '@/lib/validations/order';
 import { useClients } from '@/lib/hooks/useClients';
 import { useProducts } from '@/lib/hooks/useProducts';
+import { useSuggestedPrice } from '@/lib/hooks/useSuggestedPrice';
+import { useToast } from '@/components/shared/Toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Trash2, Plus, Loader2, AlertCircle } from 'lucide-react';
+
+/**
+ * Inner component for a single order item row.
+ * Isolated so we can call useSuggestedPrice as a hook (hooks can't be called in loops).
+ */
+function OrderItemPriceFetcher({
+  clientId,
+  productId,
+  onSuggestedPrice,
+  onError,
+}: {
+  clientId: string;
+  productId: string;
+  onSuggestedPrice: (price: number) => void;
+  onError: () => void;
+}) {
+  const { data, isError } = useSuggestedPrice(clientId, productId);
+
+  useEffect(() => {
+    if (data !== undefined && data !== null) {
+      onSuggestedPrice(data.price);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  useEffect(() => {
+    if (isError) {
+      onError();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isError]);
+
+  return null;
+}
 
 interface OrderFormProps {
   onSubmit: (data: any) => Promise<void>;
@@ -24,6 +60,7 @@ export function OrderForm({
   isLoading = false,
 }: OrderFormProps) {
   const [isForecastOrder, setIsForecastOrder] = useState(false);
+  const { showWarning } = useToast();
   
   const {
     register,
@@ -104,7 +141,12 @@ export function OrderForm({
 
   const handleProductSelect = (index: number, product: any) => {
     setValue(`items.${index}.product_id`, product.id);
-    setValue(`items.${index}.unit_price`, product.sell_price);
+    // Clear price so useSuggestedPrice can populate it; fall back to sell_price if no client
+    if (!selectedClientId) {
+      setValue(`items.${index}.unit_price`, product.sell_price);
+    } else {
+      setValue(`items.${index}.unit_price`, 0);
+    }
     setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
     setProductSearches({ ...productSearches, [index]: '' });
   };
@@ -219,6 +261,17 @@ export function OrderForm({
 
               return (
                 <Card key={field.id} className="p-4 space-y-4">
+                  {/* Fetch suggested price when both client and product are selected */}
+                  {selectedClientId && items[index]?.product_id && (
+                    <OrderItemPriceFetcher
+                      clientId={selectedClientId}
+                      productId={items[index].product_id}
+                      onSuggestedPrice={(price) => setValue(`items.${index}.unit_price`, price)}
+                      onError={() =>
+                        showWarning('Price suggestion unavailable', 'Could not load suggested price. Please enter the price manually.')
+                      }
+                    />
+                  )}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     {/* Product Selection */}
                     <div className="relative">
