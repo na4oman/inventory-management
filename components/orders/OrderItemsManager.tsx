@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle2, Circle } from 'lucide-react';
 
 interface OrderItemsManagerProps {
-  items: (OrderItem & { product: any })[];
+  items: (OrderItem & { product: any; status?: string })[];
   onUpdateItem: (itemId: string, received_qty: number, status: string) => Promise<void>;
   isLoading?: boolean;
 }
