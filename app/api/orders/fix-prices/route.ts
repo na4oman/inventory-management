@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
         items:order_items(
           id,
           ordered_qty,
-          unit_price
+          unit_price,
+          product_id
         )
       `);
 
