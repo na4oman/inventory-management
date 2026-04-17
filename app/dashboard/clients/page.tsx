@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useClients, useDeleteClient } from '@/lib/hooks/useClients';
+
 import { useToast } from '@/components/shared/Toast';
 import { DataTable } from '@/components/shared/DataTable';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [deletingClientId, setDeletingClientId] = useState<string>('');
 
   const filters = {
     page,
@@ -28,11 +30,12 @@ export default function ClientsPage() {
   };
 
   const { data, isLoading, error } = useClients(filters);
+  const deleteClient = useDeleteClient(deletingClientId);
 
   const handleDelete = useCallback(async (clientId: string, clientName: string) => {
     if (!confirm(`Are you sure you want to delete ${clientName}?`)) return;
     try {
-      const deleteClient = useDeleteClient(clientId);
+      setDeletingClientId(clientId);
       await deleteClient.mutateAsync();
       addToast({ type: 'success', title: 'Client deleted successfully' });
     } catch (err) {
@@ -41,8 +44,10 @@ export default function ClientsPage() {
         title: 'Failed to delete client',
         message: err instanceof Error ? err.message : 'Unknown error',
       });
+    } finally {
+      setDeletingClientId('');
     }
-  }, [addToast]);
+  }, [addToast, deleteClient]);
 
   const columns: ColumnDef<Client>[] = useMemo(() => [
     {

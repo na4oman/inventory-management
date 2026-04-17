@@ -171,7 +171,7 @@ export default function PriceCheckPage() {
                 <div className="text-sm text-gray-500 py-2">No results found.</div>
               ) : (
                 <>
-                  <p className="text-xs text-gray-400 mb-2">Prices are from Google's index and may differ slightly from current site prices. Click source to verify.</p>
+                  <p className="text-xs text-gray-400 mb-2">Prices are from Google&apos;s index and may differ slightly from current site prices. Click source to verify.</p>
                   <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200">

@@ -47,7 +47,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
     if (toast.duration !== 0) {
       setTimeout(() => {
-        removeToast(id)
+        setToasts((prev) => prev.filter((t) => t.id !== id))
       }, toast.duration || 3000)
     }
   }, [])
