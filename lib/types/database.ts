@@ -146,3 +146,34 @@ export interface AnalyticsSummary {
   top_selling_products: TopSellingProduct[];
   sales_by_period: SalesByPeriod[];
 }
+
+// Inventory lot table
+export interface InventoryLot {
+  id: string
+  product_id: string
+  lot_number: number
+  cost_price: number
+  remaining_qty: number
+  original_qty: number
+  status: 'active' | 'depleted'
+  source: 'order' | 'free_stock'
+  order_item_id: string | null
+  arrival_date: string          // ISO date string
+  notes: string | null
+  created_at: string
+}
+
+// Lot allocations table
+export interface LotAllocation {
+  id: string
+  lot_id: string
+  sale_item_id: string
+  quantity_allocated: number
+  cost_price_at_time_of_sale: number
+  created_at: string
+}
+
+// Extended sale item to carry lot allocations
+export interface SaleItemWithAllocations extends SaleItem {
+  lot_allocations: LotAllocation[]
+}

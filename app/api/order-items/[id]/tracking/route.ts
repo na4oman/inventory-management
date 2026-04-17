@@ -2,11 +2,12 @@ import { supabaseServer as supabase } from '@/lib/supabase/server';
 import { createSuccessResponse, createErrorResponse } from '@/lib/types/api';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { PostgrestError } from '@supabase/supabase-js';
 
 /**
  * PATCH /api/order-items/[id]/tracking
  * Update forwarded_qty or wh_qty on an order item.
- * When wh_qty changes, also syncs the product's qty field.
+ * When wh_qty changes, creates an inventory lot via create_inventory_lot RPC.
  */
 export async function PATCH(
   request: NextRequest,
@@ -37,29 +38,33 @@ export async function PATCH(
       .from('order_items')
       .update(updateData)
       .eq('id', itemId)
-      .select('*, product_id')
+      .select('*, product_id, cost_price, quantity')
       .single();
 
     if (error || !updatedItem) {
       return NextResponse.json(createErrorResponse('Order item not found'), { status: 404 });
     }
 
-    // If wh_qty changed, sync product qty from all order items
+    // If wh_qty changed, create an inventory lot via RPC instead of directly updating products.qty
     if (wh_qty !== undefined && updatedItem.product_id) {
-      const { data: allOrderItems } = await supabase
-        .from('order_items')
-        .select('id, wh_qty')
-        .eq('product_id', updatedItem.product_id);
+      const arrivalDate = new Date().toISOString().split('T')[0];
 
-      const totalWhQty = (allOrderItems || []).reduce(
-        (sum, oi) => sum + (oi.id === itemId ? wh_qty : (oi.wh_qty || 0)),
-        0
-      );
+      const { error: rpcError } = await supabase.rpc('create_inventory_lot', {
+        p_product_id: updatedItem.product_id,
+        p_quantity: wh_qty,
+        p_cost_price: updatedItem.cost_price,
+        p_source: 'order',
+        p_arrival_date: arrivalDate,
+        p_order_item_id: itemId,
+      });
 
-      await supabase
-        .from('products')
-        .update({ qty: totalWhQty, booked_qty: 0 })
-        .eq('id', updatedItem.product_id);
+      if (rpcError) {
+        const pgError = rpcError as PostgrestError;
+        return NextResponse.json(
+          createErrorResponse(pgError.message || 'Failed to create inventory lot'),
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json(createSuccessResponse(updatedItem));

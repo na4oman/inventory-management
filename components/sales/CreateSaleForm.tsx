@@ -1,18 +1,55 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useClients } from '@/lib/hooks/useClients';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useProducts } from '@/lib/hooks/useProducts';
+import { useSuggestedPrice } from '@/lib/hooks/useSuggestedPrice';
+import { useToast } from '@/components/shared/Toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
+import { LotSelector, LotAllocationWithCost } from '@/components/sales/LotSelector';
+
+/**
+ * Fetches the suggested price for a client–product pair and calls back with the result.
+ * Isolated as a component so the hook can be called per-item without violating rules of hooks.
+ */
+function SalePriceFetcher({
+  clientId,
+  productId,
+  onSuggestedPrice,
+  onError,
+}: {
+  clientId: string;
+  productId: string;
+  onSuggestedPrice: (price: number) => void;
+  onError: () => void;
+}) {
+  const { data, isError } = useSuggestedPrice(clientId, productId);
+
+  useEffect(() => {
+    if (data !== undefined && data !== null) {
+      onSuggestedPrice(data.price);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  useEffect(() => {
+    if (isError) {
+      onError();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isError]);
+
+  return null;
+}
 
 const createSaleSchema = z.object({
   client_id: z.string().uuid('Client is required'),
@@ -26,6 +63,7 @@ interface SaleItem {
   product_id: string;
   quantity: number;
   unit_price: number;
+  lot_allocations?: { lot_id: string; quantity: number }[];
 }
 
 interface CreateSaleFormProps {
@@ -39,6 +77,7 @@ export function CreateSaleForm({
   onCancel,
   isLoading = false,
 }: CreateSaleFormProps) {
+  const { showWarning } = useToast();
   const {
     register,
     handleSubmit,
@@ -57,7 +96,12 @@ export function CreateSaleForm({
   const [clientSearch, setClientSearch] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [selectedOrderItems, setSelectedOrderItems] = useState<{ [key: string]: { qty: number; price: number } }>({});
-  const [selectedFreeStockItems, setSelectedFreeStockItems] = useState<{ [key: string]: { qty: number; price: number } }>({});
+  // Free-stock: price per product (user-entered sell price)
+  const [selectedFreeStockItems, setSelectedFreeStockItems] = useState<{ [productId: string]: { price: number } }>({});
+  // Free-stock: lot allocations with cost_price per product
+  const [freeStockAllocations, setFreeStockAllocations] = useState<{ [productId: string]: LotAllocationWithCost[] }>({});
+  // Free-stock: validity per product (LotSelector reports isValid)
+  const [freeStockValidity, setFreeStockValidity] = useState<{ [productId: string]: boolean }>({});
   const [freeStockSearch, setFreeStockSearch] = useState('');
 
   const { data: clientsData } = useClients({
@@ -129,15 +173,14 @@ export function CreateSaleForm({
       }
     });
 
-    // From free stock
+    // From free stock — cost derived from lot allocations (cost_price per lot)
     Object.entries(selectedFreeStockItems).forEach(([productId, data]) => {
-      if (data.qty > 0) {
-        const product = freeStockProducts.find(p => p.id === productId);
-        if (product) {
-          totalQty += data.qty;
-          totalAmount += data.qty * data.price;
-          totalCost += data.qty * product.cost_price;
-        }
+      const allocs = freeStockAllocations[productId] ?? [];
+      const qty = allocs.reduce((s, a) => s + a.quantity, 0);
+      if (qty > 0) {
+        totalQty += qty;
+        totalAmount += qty * data.price;
+        totalCost += allocs.reduce((s, a) => s + a.quantity * a.cost_price, 0);
       }
     });
 
@@ -147,7 +190,7 @@ export function CreateSaleForm({
       totalCost,
       profit: totalAmount - totalCost,
     };
-  }, [selectedOrderItems, selectedFreeStockItems, receivedItems, freeStockProducts]);
+  }, [selectedOrderItems, selectedFreeStockItems, freeStockAllocations, receivedItems]);
 
   const handleFormSubmit = async (data: any) => {
     const items: SaleItem[] = [];
@@ -168,17 +211,20 @@ export function CreateSaleForm({
         }
       });
 
-    // Add free stock items
-    Object.entries(selectedFreeStockItems)
-      .filter(([_, data]) => data.qty > 0)
-      .forEach(([productId, data]) => {
+    // Add free stock items with lot allocations
+    Object.entries(selectedFreeStockItems).forEach(([productId, data]) => {
+      const allocs = freeStockAllocations[productId] ?? [];
+      const qty = allocs.reduce((s, a) => s + a.quantity, 0);
+      if (qty > 0) {
         items.push({
           source: 'free_stock',
           product_id: productId,
-          quantity: data.qty,
+          quantity: qty,
           unit_price: data.price,
+          lot_allocations: allocs.map(a => ({ lot_id: a.lot_id, quantity: a.quantity })),
         });
-      });
+      }
+    });
 
     if (items.length === 0) {
       alert('Please select at least one item');
@@ -228,6 +274,8 @@ export function CreateSaleForm({
                       setClientSearch('');
                       setSelectedOrderItems({});
                       setSelectedFreeStockItems({});
+                      setFreeStockAllocations({});
+                      setFreeStockValidity({});
                     }}
                   >
                     {client.name}
@@ -311,6 +359,22 @@ export function CreateSaleForm({
                           disabled={isLoading}
                           className="mt-1 cursor-pointer"
                         />
+                        {/* Fetch suggested price when item is selected */}
+                        {selectedOrderItems[item.id] && selectedClientId && (
+                          <SalePriceFetcher
+                            clientId={selectedClientId}
+                            productId={item.product_id}
+                            onSuggestedPrice={(price) =>
+                              setSelectedOrderItems((prev) => ({
+                                ...prev,
+                                [item.id]: { ...prev[item.id], price },
+                              }))
+                            }
+                            onError={() =>
+                              showWarning('Price suggestion unavailable', 'Could not load suggested price. Please enter the price manually.')
+                            }
+                          />
+                        )}
                       <div className="flex-1">
                         <div className="font-medium text-sm">
                           {item.order_number} - {item.product.part_number} - {item.product.model}
@@ -398,88 +462,111 @@ export function CreateSaleForm({
                 </div>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto border border-gray-200 rounded-md p-4">
-                  {freeStockProducts.map((product) => (
-                    <div key={product.id} className="flex items-start gap-4 p-3 bg-gray-50 rounded">
-                      <input
-                        type="checkbox"
-                        checked={selectedFreeStockItems[product.id] ? true : false}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedFreeStockItems({
-                              ...selectedFreeStockItems,
-                              [product.id]: { qty: 1, price: product.sell_price },
-                            });
-                          } else {
-                            const newItems = { ...selectedFreeStockItems };
-                            delete newItems[product.id];
-                            setSelectedFreeStockItems(newItems);
-                          }
-                        }}
-                        disabled={isLoading}
-                        className="mt-1 cursor-pointer"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">
-                          {product.part_number} - {product.model}
+                  {freeStockProducts.map((product) => {
+                    const isChecked = !!selectedFreeStockItems[product.id];
+                    return (
+                      <div key={product.id} className="space-y-2">
+                        <div className="flex items-start gap-4 p-3 bg-gray-50 rounded">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedFreeStockItems({
+                                  ...selectedFreeStockItems,
+                                  [product.id]: { price: product.sell_price },
+                                });
+                              } else {
+                                const newItems = { ...selectedFreeStockItems };
+                                delete newItems[product.id];
+                                setSelectedFreeStockItems(newItems);
+                                // Clear allocations and validity
+                                const newAllocs = { ...freeStockAllocations };
+                                delete newAllocs[product.id];
+                                setFreeStockAllocations(newAllocs);
+                                const newValidity = { ...freeStockValidity };
+                                delete newValidity[product.id];
+                                setFreeStockValidity(newValidity);
+                              }
+                            }}
+                            disabled={isLoading}
+                            className="mt-1 cursor-pointer"
+                          />
+                          {/* Fetch suggested price when item is selected */}
+                          {isChecked && selectedClientId && (
+                            <SalePriceFetcher
+                              clientId={selectedClientId}
+                              productId={product.id}
+                              onSuggestedPrice={(price) =>
+                                setSelectedFreeStockItems((prev) => ({
+                                  ...prev,
+                                  [product.id]: { ...prev[product.id], price },
+                                }))
+                              }
+                              onError={() =>
+                                showWarning('Price suggestion unavailable', 'Could not load suggested price. Please enter the price manually.')
+                              }
+                            />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">
+                              {product.part_number} - {product.model}
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">
+                              Free Stock: {product.free_qty} | Sell Price: €{product.sell_price.toFixed(2)} | Cost: €{product.cost_price.toFixed(2)}
+                            </div>
+                          </div>
+                          {isChecked && (
+                            <div className="flex items-end gap-2">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-gray-700">Price</label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="Price"
+                                  value={selectedFreeStockItems[product.id].price}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value) || 0;
+                                    setSelectedFreeStockItems({
+                                      ...selectedFreeStockItems,
+                                      [product.id]: {
+                                        ...selectedFreeStockItems[product.id],
+                                        price: value,
+                                      },
+                                    });
+                                  }}
+                                  className="w-20 text-right text-xs"
+                                  disabled={isLoading}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-600 mt-1">
-                          Free Stock: {product.free_qty} | Sell Price: €{product.sell_price.toFixed(2)} | Cost: €{product.cost_price.toFixed(2)}
-                        </div>
+                        {/* LotSelector below the product row when checked */}
+                        {isChecked && (
+                          <div className="ml-10 mr-4">
+                            <LotSelector
+                              productId={product.id}
+                              maxQty={product.free_qty}
+                              onChange={(allocs) => {
+                                setFreeStockAllocations((prev) => ({
+                                  ...prev,
+                                  [product.id]: allocs,
+                                }));
+                              }}
+                              onValidChange={(valid) => {
+                                setFreeStockValidity((prev) => ({
+                                  ...prev,
+                                  [product.id]: valid,
+                                }));
+                              }}
+                              disabled={isLoading}
+                            />
+                          </div>
+                        )}
                       </div>
-                      {selectedFreeStockItems[product.id] && (
-                        <div className="flex items-end gap-2">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-semibold text-gray-700">Qty</label>
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="Qty"
-                              value={selectedFreeStockItems[product.id].qty}
-                              onChange={(e) => {
-                                const value = Math.min(
-                                  product.free_qty,
-                                  parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0
-                                );
-                                setSelectedFreeStockItems({
-                                  ...selectedFreeStockItems,
-                                  [product.id]: {
-                                    ...selectedFreeStockItems[product.id],
-                                    qty: value,
-                                  },
-                                });
-                              }}
-                              className="w-16 text-right text-xs"
-                              disabled={isLoading}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-1 justify-end pb-0.5">
-                            <span className="text-xs text-gray-600 text-center">/ {product.free_qty}</span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-semibold text-gray-700">Price</label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="Price"
-                              value={selectedFreeStockItems[product.id].price}
-                              onChange={(e) => {
-                                const value = parseFloat(e.target.value) || 0;
-                                setSelectedFreeStockItems({
-                                  ...selectedFreeStockItems,
-                                  [product.id]: {
-                                    ...selectedFreeStockItems[product.id],
-                                    price: value,
-                                  },
-                                });
-                              }}
-                              className="w-20 text-right text-xs"
-                              disabled={isLoading}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>
@@ -552,7 +639,16 @@ export function CreateSaleForm({
         <div className="flex gap-3 pt-4">
           <Button
             type="submit"
-            disabled={isLoading || (Object.keys(selectedOrderItems).length === 0 && Object.keys(selectedFreeStockItems).length === 0)}
+            disabled={
+              isLoading ||
+              (Object.keys(selectedOrderItems).length === 0 && Object.keys(selectedFreeStockItems).length === 0) ||
+              // Block if any checked free-stock product has no allocations or invalid state
+              Object.keys(selectedFreeStockItems).some((productId) => {
+                const allocs = freeStockAllocations[productId] ?? [];
+                const qty = allocs.reduce((s, a) => s + a.quantity, 0);
+                return qty === 0 || freeStockValidity[productId] === false;
+              })
+            }
             className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
           >
             {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -572,5 +668,3 @@ export function CreateSaleForm({
     </Card>
   );
 }
-
-

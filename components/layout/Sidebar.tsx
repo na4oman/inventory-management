@@ -17,6 +17,7 @@ import {
   Settings,
   Clock,
   Search,
+  Tag,
 } from 'lucide-react'
 import { useState } from 'react'
 import { UserButton } from '@clerk/nextjs'
@@ -32,6 +33,7 @@ const navItems = [
     subItems: [{ label: 'Pending Orders', href: '/dashboard/orders/pending' }],
   },
   { label: 'Sales', href: '/dashboard/sales', icon: DollarSign },
+  { label: 'Prices', href: '/dashboard/prices', icon: Tag },
   { label: 'Clients', href: '/dashboard/clients', icon: Users },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { label: 'Price Check', href: '/dashboard/price-check', icon: Search },

@@ -43,6 +43,29 @@ export async function PATCH(
       );
     }
 
+    // If unit_price is being changed, verify the parent order is still pending
+    if (unit_price !== undefined && unit_price !== orderItem.unit_price) {
+      const { data: parentOrder, error: orderFetchError } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderItem.order_id)
+        .single();
+
+      if (orderFetchError || !parentOrder) {
+        return NextResponse.json(
+          createErrorResponse('Parent order not found'),
+          { status: 404 }
+        );
+      }
+
+      if (parentOrder.status !== 'pending') {
+        return NextResponse.json(
+          createErrorResponse('Cannot modify price: order is not in pending status'),
+          { status: 400 }
+        );
+      }
+    }
+
     // Update order item
     const { data: updatedItem, error: updateError } = await supabase
       .from('order_items')
