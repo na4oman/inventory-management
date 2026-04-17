@@ -125,7 +125,6 @@ export async function POST(request: NextRequest) {
           cost_price: costPrice,
           sell_price: sellPrice,
           booked_qty: 0,
-          user_id: 'user_3AkTs21U6NLdEJWSYVJrW05kWIn',
         });
       } catch (error) {
         errors.push(
