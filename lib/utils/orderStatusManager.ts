@@ -20,7 +20,7 @@ export function determineOrderStatus(items: OrderItem[]): 'pending' | 'received'
   }
 
   // Check if all items are fully shipped
-  const allShipped = items.every((item) => item.shipped_qty >= item.ordered_qty);
+  const allShipped = items.every((item) => (item.shipped_qty ?? 0) >= item.ordered_qty);
   if (allShipped) {
     console.log('All items shipped - status: completed');
     return 'completed';
@@ -109,7 +109,7 @@ export function calculateShippingPercentage(items: OrderItem[]): number {
   if (!items || items.length === 0) return 0;
 
   const totalOrdered = items.reduce((sum, item) => sum + item.ordered_qty, 0);
-  const totalShipped = items.reduce((sum, item) => sum + item.shipped_qty, 0);
+  const totalShipped = items.reduce((sum, item) => sum + (item.shipped_qty ?? 0), 0);
 
   if (totalOrdered === 0) return 0;
   return Math.round((totalShipped / totalOrdered) * 100);
@@ -121,7 +121,7 @@ export function calculateShippingPercentage(items: OrderItem[]): number {
 export function getOrderFulfillmentSummary(items: OrderItem[]) {
   const totalOrdered = items.reduce((sum, item) => sum + item.ordered_qty, 0);
   const totalReceived = items.reduce((sum, item) => sum + item.received_qty, 0);
-  const totalShipped = items.reduce((sum, item) => sum + item.shipped_qty, 0);
+  const totalShipped = items.reduce((sum, item) => sum + (item.shipped_qty ?? 0), 0);
   const totalPending = totalOrdered - totalReceived;
 
   const fulfillmentPercentage = calculateFulfillmentPercentage(items);
