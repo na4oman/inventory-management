@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProducts, useDeleteProduct } from '@/lib/hooks/useProducts';
@@ -21,6 +21,15 @@ export default function ProductsPage() {
   const { showSuccess, showError } = useToast();
   const { isCollapsed } = useContext(SidebarContext);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -38,7 +47,7 @@ export default function ProductsPage() {
   );
 
   const { data, isLoading, error } = useProducts({
-    search,
+    search: debouncedSearch,
     sortBy,
     sortOrder,
     page,
@@ -98,7 +107,7 @@ export default function ProductsPage() {
             type="text"
             placeholder="Search by part number, model, model code, or description..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => setSearch(e.target.value)}
             className="flex-1 min-w-[200px] rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           />
           <Button
