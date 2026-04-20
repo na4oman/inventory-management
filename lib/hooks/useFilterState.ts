@@ -17,7 +17,7 @@ export function useFilterState<T extends Record<string, any>>(
 
   // Parse filters from URL
   const filters = useMemo(() => {
-    const result = { ...defaultFilters };
+    const result: Record<string, any> = { ...defaultFilters };
     
     Object.keys(defaultFilters).forEach((key) => {
       const paramKey = prefix ? `${prefix}_${key}` : key;
@@ -37,7 +37,7 @@ export function useFilterState<T extends Record<string, any>>(
       }
     });
     
-    return result;
+    return result as T;
   }, [searchParams, defaultFilters, prefix]);
 
   // Update filters and URL
