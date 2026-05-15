@@ -96,8 +96,8 @@ export function CreateSaleForm({
   const [clientSearch, setClientSearch] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [selectedOrderItems, setSelectedOrderItems] = useState<{ [key: string]: { qty: number; price: number } }>({});
-  // Free-stock: price per product (user-entered sell price)
-  const [selectedFreeStockItems, setSelectedFreeStockItems] = useState<{ [productId: string]: { price: number } }>({});
+  // Free-stock: price per product (user-entered sell price) and qty
+  const [selectedFreeStockItems, setSelectedFreeStockItems] = useState<{ [productId: string]: { price: number; qty: number } }>({});
   // Free-stock: lot allocations with cost_price per product
   const [freeStockAllocations, setFreeStockAllocations] = useState<{ [productId: string]: LotAllocationWithCost[] }>({});
   // Free-stock: validity per product (LotSelector reports isValid)
@@ -474,7 +474,7 @@ export function CreateSaleForm({
                               if (e.target.checked) {
                                 setSelectedFreeStockItems({
                                   ...selectedFreeStockItems,
-                                  [product.id]: { price: product.sell_price },
+                                  [product.id]: { price: product.sell_price, qty: product.free_qty },
                                 });
                               } else {
                                 const newItems = { ...selectedFreeStockItems };
@@ -519,6 +519,33 @@ export function CreateSaleForm({
                           {isChecked && (
                             <div className="flex items-end gap-2">
                               <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-gray-700">Qty</label>
+                                <Input
+                                  type="text"
+                                  inputMode="numeric"
+                                  placeholder="Qty"
+                                  value={selectedFreeStockItems[product.id].qty}
+                                  onChange={(e) => {
+                                    const value = Math.min(
+                                      product.free_qty,
+                                      parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0
+                                    );
+                                    setSelectedFreeStockItems({
+                                      ...selectedFreeStockItems,
+                                      [product.id]: {
+                                        ...selectedFreeStockItems[product.id],
+                                        qty: value,
+                                      },
+                                    });
+                                  }}
+                                  className="w-16 text-right text-xs"
+                                  disabled={isLoading}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1 justify-end pb-0.5">
+                                <span className="text-xs text-gray-600 text-center">/ {product.free_qty}</span>
+                              </div>
+                              <div className="flex flex-col gap-1">
                                 <label className="text-xs font-semibold text-gray-700">Price</label>
                                 <Input
                                   type="number"
@@ -548,6 +575,7 @@ export function CreateSaleForm({
                             <LotSelector
                               productId={product.id}
                               maxQty={product.free_qty}
+                              totalQty={selectedFreeStockItems[product.id]?.qty}
                               onChange={(allocs) => {
                                 setFreeStockAllocations((prev) => ({
                                   ...prev,

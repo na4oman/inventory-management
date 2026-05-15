@@ -15,6 +15,8 @@ export interface UseLotSelectorReturn {
   isError: boolean
   allocations: LotAllocationInput[]
   setAllocation: (lotId: string, qty: number) => void
+  /** Distribute qty across lots FIFO (oldest first). Pass 0 to clear all. */
+  setTotalQty: (qty: number) => void
   totalAllocated: number
   isValid: boolean
   validationError: string | null
@@ -37,7 +39,6 @@ export function useLotSelector(productId: string, maxQty: number): UseLotSelecto
   const setAllocation = useCallback((lotId: string, qty: number) => {
     setAllocationMap((prev) => {
       if (qty <= 0) {
-        // Remove the entry when qty is cleared
         const next = { ...prev }
         delete next[lotId]
         return next
@@ -45,6 +46,27 @@ export function useLotSelector(productId: string, maxQty: number): UseLotSelecto
       return { ...prev, [lotId]: qty }
     })
   }, [])
+
+  /**
+   * Distribute a total qty across lots FIFO (oldest first, as returned by the API).
+   * Fills each lot up to its remaining_qty before moving to the next.
+   * Passing 0 clears all allocations.
+   */
+  const setTotalQty = useCallback((qty: number) => {
+    if (qty <= 0) {
+      setAllocationMap({})
+      return
+    }
+    const next: Record<string, number> = {}
+    let remaining = qty
+    for (const lot of lots) {
+      if (remaining <= 0) break
+      const take = Math.min(remaining, lot.remaining_qty)
+      if (take > 0) next[lot.id] = take
+      remaining -= take
+    }
+    setAllocationMap(next)
+  }, [lots])
 
   const allocations: LotAllocationInput[] = useMemo(
     () =>
@@ -74,6 +96,7 @@ export function useLotSelector(productId: string, maxQty: number): UseLotSelecto
     isError,
     allocations,
     setAllocation,
+    setTotalQty,
     totalAllocated,
     isValid,
     validationError,

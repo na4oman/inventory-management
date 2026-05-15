@@ -22,14 +22,24 @@ export interface LotAllocationWithCost {
 export interface LotSelectorProps {
   productId: string
   maxQty: number
+  /** When provided, auto-distributes this qty across lots FIFO on mount and changes */
+  totalQty?: number
   onChange: (allocations: LotAllocationWithCost[]) => void
   onValidChange?: (isValid: boolean) => void
   disabled?: boolean
 }
 
-export function LotSelector({ productId, maxQty, onChange, onValidChange, disabled = false }: LotSelectorProps) {
-  const { lots, isLoading, isError, allocations, setAllocation, totalAllocated, isValid, validationError } =
+export function LotSelector({ productId, maxQty, totalQty, onChange, onValidChange, disabled = false }: LotSelectorProps) {
+  const { lots, isLoading, isError, allocations, setAllocation, setTotalQty, totalAllocated, isValid, validationError } =
     useLotSelector(productId, maxQty)
+
+  // When totalQty prop changes (and lots are loaded), auto-distribute FIFO
+  useEffect(() => {
+    if (lots.length > 0 && totalQty !== undefined) {
+      setTotalQty(totalQty)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalQty, lots.length])
 
   // Notify parent whenever allocations change, enriched with cost_price from lots
   useEffect(() => {

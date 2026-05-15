@@ -201,17 +201,18 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+
+        // Validate lot_allocations are present for free stock items
+        if (!item.lot_allocations || item.lot_allocations.length === 0) {
+          return NextResponse.json(
+            createErrorResponse(`No lot allocations provided for free stock product ${product.part_number}`),
+            { status: 400 }
+          );
+        }
       }
 
-      // Check product has sufficient inventory
-      if (item.quantity > product.qty) {
-        return NextResponse.json(
-          createErrorResponse(
-            `Insufficient inventory for product ${product.part_number}. Available: ${product.qty}, Requested: ${item.quantity}`
-          ),
-          { status: 400 }
-        );
-      }
+      // Note: product.qty check is skipped here — each source type has its own
+      // availability check above (wh_qty for order items, product.qty for free stock).
     }
 
     // Generate sale number
@@ -266,7 +267,8 @@ export async function POST(request: NextRequest) {
       let costTotal: number;
       let unitCost: number;
       if (item.source === 'free_stock') {
-        costTotal = (item.lot_allocations as any[]).reduce(
+        const lotAllocs: any[] = item.lot_allocations || [];
+        costTotal = lotAllocs.reduce(
           (sum: number, alloc: any) => sum + alloc.quantity * alloc.cost_price, 0
         );
         unitCost = quantity > 0 ? costTotal / quantity : 0;
@@ -388,9 +390,10 @@ export async function POST(request: NextRequest) {
 
       // For free-stock items, call process_lot_sale RPC to handle lot deduction and qty sync
       if (item.source === 'free_stock') {
+        const lotAllocs: any[] = item.lot_allocations || [];
         const { error: rpcError } = await supabase.rpc('process_lot_sale', {
           p_sale_item_id: saleItem.id,
-          p_allocations: (item.lot_allocations as any[]).map((a: any) => ({
+          p_allocations: lotAllocs.map((a: any) => ({
             lot_id: a.lot_id,
             quantity: a.quantity,
           })),
