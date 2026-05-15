@@ -26,11 +26,13 @@ export interface LotSelectorProps {
   totalQty?: number
   onChange: (allocations: LotAllocationWithCost[]) => void
   onValidChange?: (isValid: boolean) => void
+  /** Called with the actual available qty (sum of lot remaining_qty) once lots are loaded */
+  onActualAvailable?: (qty: number) => void
   disabled?: boolean
 }
 
-export function LotSelector({ productId, maxQty, totalQty, onChange, onValidChange, disabled = false }: LotSelectorProps) {
-  const { lots, isLoading, isError, allocations, setAllocation, setTotalQty, totalAllocated, isValid, validationError } =
+export function LotSelector({ productId, maxQty, totalQty, onChange, onValidChange, onActualAvailable, disabled = false }: LotSelectorProps) {
+  const { lots, isLoading, isError, allocations, setAllocation, setTotalQty, totalAllocated, actualAvailable, isValid, validationError } =
     useLotSelector(productId, maxQty)
 
   // When totalQty prop changes (and lots are loaded), auto-distribute FIFO
@@ -40,6 +42,14 @@ export function LotSelector({ productId, maxQty, totalQty, onChange, onValidChan
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalQty, lots.length])
+
+  // Notify parent of actual available qty once lots are loaded
+  useEffect(() => {
+    if (lots.length > 0 && actualAvailable > 0) {
+      onActualAvailable?.(actualAvailable)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actualAvailable])
 
   // Notify parent whenever allocations change, enriched with cost_price from lots
   useEffect(() => {

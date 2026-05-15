@@ -102,6 +102,8 @@ export function CreateSaleForm({
   const [freeStockAllocations, setFreeStockAllocations] = useState<{ [productId: string]: LotAllocationWithCost[] }>({});
   // Free-stock: validity per product (LotSelector reports isValid)
   const [freeStockValidity, setFreeStockValidity] = useState<{ [productId: string]: boolean }>({});
+  // Free-stock: actual available qty per product (from lot remaining_qty sum, more reliable than product.qty)
+  const [freeStockActualQty, setFreeStockActualQty] = useState<{ [productId: string]: number }>({});
   const [freeStockSearch, setFreeStockSearch] = useState('');
 
   const { data: clientsData } = useClients({
@@ -486,6 +488,9 @@ export function CreateSaleForm({
                                 const newValidity = { ...freeStockValidity };
                                 delete newValidity[product.id];
                                 setFreeStockValidity(newValidity);
+                                const newActual = { ...freeStockActualQty };
+                                delete newActual[product.id];
+                                setFreeStockActualQty(newActual);
                               }
                             }}
                             disabled={isLoading}
@@ -525,8 +530,9 @@ export function CreateSaleForm({
                                   placeholder="Qty"
                                   value={selectedFreeStockItems[product.id].qty}
                                   onChange={(e) => {
+                                    const actualMax = freeStockActualQty[product.id] ?? product.free_qty;
                                     const value = Math.min(
-                                      product.free_qty,
+                                      actualMax,
                                       parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0
                                     );
                                     setSelectedFreeStockItems({
@@ -542,7 +548,7 @@ export function CreateSaleForm({
                                 />
                               </div>
                               <div className="flex flex-col gap-1 justify-end pb-0.5">
-                                <span className="text-xs text-gray-600 text-center">/ {product.free_qty}</span>
+                                <span className="text-xs text-gray-600 text-center">/ {freeStockActualQty[product.id] ?? product.free_qty}</span>
                               </div>
                               <div className="flex flex-col gap-1">
                                 <label className="text-xs font-semibold text-gray-700">Price</label>
@@ -573,7 +579,7 @@ export function CreateSaleForm({
                           <div className="ml-10 mr-4">
                             <LotSelector
                               productId={product.id}
-                              maxQty={product.free_qty}
+                              maxQty={freeStockActualQty[product.id] ?? product.free_qty}
                               totalQty={selectedFreeStockItems[product.id]?.qty}
                               onChange={(allocs) => {
                                 setFreeStockAllocations((prev) => ({
@@ -585,6 +591,12 @@ export function CreateSaleForm({
                                 setFreeStockValidity((prev) => ({
                                   ...prev,
                                   [product.id]: valid,
+                                }));
+                              }}
+                              onActualAvailable={(qty) => {
+                                setFreeStockActualQty((prev) => ({
+                                  ...prev,
+                                  [product.id]: qty,
                                 }));
                               }}
                               disabled={isLoading}

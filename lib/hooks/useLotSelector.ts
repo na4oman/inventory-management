@@ -18,6 +18,8 @@ export interface UseLotSelectorReturn {
   /** Distribute qty across lots FIFO (oldest first). Pass 0 to clear all. */
   setTotalQty: (qty: number) => void
   totalAllocated: number
+  /** Actual available qty = sum of active lot remaining_qty (more reliable than product.qty) */
+  actualAvailable: number
   isValid: boolean
   validationError: string | null
 }
@@ -81,12 +83,19 @@ export function useLotSelector(productId: string, maxQty: number): UseLotSelecto
     [allocations]
   )
 
+  const actualAvailable = useMemo(
+    () => lots.reduce((sum, l) => sum + l.remaining_qty, 0),
+    [lots]
+  )
+
   const validationError: string | null = useMemo(() => {
-    if (totalAllocated > maxQty) {
-      return `Total allocated (${totalAllocated}) exceeds available stock (${maxQty})`
+    // Use actual lot stock as the ceiling — product.qty can be stale
+    const ceiling = actualAvailable > 0 ? actualAvailable : maxQty
+    if (totalAllocated > ceiling) {
+      return `Total allocated (${totalAllocated}) exceeds available stock (${ceiling})`
     }
     return null
-  }, [totalAllocated, maxQty])
+  }, [totalAllocated, maxQty, actualAvailable])
 
   const isValid = validationError === null && totalAllocated > 0
 
@@ -98,6 +107,7 @@ export function useLotSelector(productId: string, maxQty: number): UseLotSelecto
     setAllocation,
     setTotalQty,
     totalAllocated,
+    actualAvailable,
     isValid,
     validationError,
   }
