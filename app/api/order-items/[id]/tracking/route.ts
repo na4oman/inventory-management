@@ -3,6 +3,7 @@ import { createSuccessResponse, createErrorResponse } from '@/lib/types/api';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { PostgrestError } from '@supabase/supabase-js';
+import { ORDER_ITEMS } from '@/lib/db/schema';
 
 /**
  * PATCH /api/order-items/[id]/tracking
@@ -49,10 +50,22 @@ export async function PATCH(
     if (wh_qty !== undefined && updatedItem.product_id) {
       const arrivalDate = new Date().toISOString().split('T')[0];
 
+      // ORDER_ITEMS.unit_price is the only price column on order_items.
+      // There is no cost_price column — see lib/db/schema.ts cross-table mapping notes.
+      let costPrice: number = updatedItem[ORDER_ITEMS.unit_price] ?? 0;
+      if (!costPrice) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('cost_price')
+          .eq('id', updatedItem.product_id)
+          .single();
+        costPrice = product?.cost_price ?? 0;
+      }
+
       const { error: rpcError } = await supabase.rpc('create_inventory_lot', {
         p_product_id: updatedItem.product_id,
         p_quantity: wh_qty,
-        p_cost_price: updatedItem.cost_price,
+        p_cost_price: costPrice,
         p_source: 'order',
         p_arrival_date: arrivalDate,
         p_order_item_id: itemId,

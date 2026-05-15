@@ -117,10 +117,13 @@ export default function PendingOrdersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ forwarded_qty: editValues[itemId] }),
       });
-      if (!res.ok) throw new Error('Failed to update');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to update');
+      }
       await queryClient.refetchQueries({ queryKey: ['orders'] });
       setEditingId(null); setEditValues({});
-    } catch (err) { console.error(err); } finally { setIsUpdating(null); }
+    } catch (err) { console.error('Failed to save forwarded qty:', err); alert((err as Error).message); } finally { setIsUpdating(null); }
   };
 
   const handleSaveWhQty = async (itemId: string) => {
@@ -131,10 +134,13 @@ export default function PendingOrdersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wh_qty: editValues[itemId] }),
       });
-      if (!res.ok) throw new Error('Failed to update');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to update');
+      }
       await queryClient.refetchQueries({ queryKey: ['orders'] });
       setEditingId(null); setEditValues({});
-    } catch (err) { console.error(err); } finally { setIsUpdating(null); }
+    } catch (err) { console.error('Failed to save WH qty:', err); alert((err as Error).message); } finally { setIsUpdating(null); }
   };
 
   const handleExportToExcel = () => {
