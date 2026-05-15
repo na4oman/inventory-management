@@ -230,7 +230,6 @@ export function CreateSaleForm({
       alert('Please select at least one item');
       return;
     }
-
     // Convert datetime-local to ISO string
     const saleDate = new Date(data.sale_date).toISOString();
 

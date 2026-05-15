@@ -245,8 +245,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (saleError || !sale) {
+      console.error('sale insert error:', saleError);
       return NextResponse.json(
-        createErrorResponse('Failed to create sale'),
+        createErrorResponse(saleError?.message || 'Failed to create sale'),
         { status: 500 }
       );
     }
@@ -382,8 +383,9 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (saleItemError || !saleItem) {
+        console.error('sale_items insert error:', saleItemError);
         return NextResponse.json(
-          createErrorResponse('Failed to create sale item'),
+          createErrorResponse(saleItemError?.message || 'Failed to create sale item'),
           { status: 500 }
         );
       }
@@ -391,6 +393,12 @@ export async function POST(request: NextRequest) {
       // For free-stock items, call process_lot_sale RPC to handle lot deduction and qty sync
       if (item.source === 'free_stock') {
         const lotAllocs: any[] = item.lot_allocations || [];
+        if (lotAllocs.length === 0) {
+          return NextResponse.json(
+            createErrorResponse(`No lot allocations for free stock product ${product.part_number}`),
+            { status: 400 }
+          );
+        }
         const { error: rpcError } = await supabase.rpc('process_lot_sale', {
           p_sale_item_id: saleItem.id,
           p_allocations: lotAllocs.map((a: any) => ({
@@ -399,8 +407,9 @@ export async function POST(request: NextRequest) {
           })),
         });
         if (rpcError) {
+          console.error('process_lot_sale RPC error:', rpcError);
           return NextResponse.json(
-            createErrorResponse(rpcError.message),
+            createErrorResponse(`Lot sale processing failed: ${rpcError.message}`),
             { status: 400 }
           );
         }
