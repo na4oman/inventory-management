@@ -38,7 +38,7 @@ export async function PATCH(
       .from('order_items')
       .update(updateData)
       .eq('id', itemId)
-      .select('*, product_id, cost_price, quantity')
+      .select('*')
       .single();
 
     if (error || !updatedItem) {
