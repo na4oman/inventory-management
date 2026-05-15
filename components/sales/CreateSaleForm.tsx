@@ -63,7 +63,7 @@ interface SaleItem {
   product_id: string;
   quantity: number;
   unit_price: number;
-  lot_allocations?: { lot_id: string; quantity: number }[];
+  lot_allocations?: { lot_id: string; quantity: number; cost_price?: number }[];
 }
 
 interface CreateSaleFormProps {
@@ -221,7 +221,7 @@ export function CreateSaleForm({
           product_id: productId,
           quantity: qty,
           unit_price: data.price,
-          lot_allocations: allocs.map(a => ({ lot_id: a.lot_id, quantity: a.quantity })),
+          lot_allocations: allocs.map(a => ({ lot_id: a.lot_id, quantity: a.quantity, cost_price: a.cost_price })),
         });
       }
     });

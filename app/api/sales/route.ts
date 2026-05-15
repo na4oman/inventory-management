@@ -269,12 +269,14 @@ export async function POST(request: NextRequest) {
       let unitCost: number;
       if (item.source === 'free_stock') {
         const lotAllocs: any[] = item.lot_allocations || [];
+        // lot_allocations sent from the client include cost_price per lot
+        // If cost_price is missing (stripped), fall back to product.cost_price
         costTotal = lotAllocs.reduce(
-          (sum: number, alloc: any) => sum + alloc.quantity * alloc.cost_price, 0
+          (sum: number, alloc: any) => sum + alloc.quantity * (alloc.cost_price ?? product.cost_price ?? 0), 0
         );
-        unitCost = quantity > 0 ? costTotal / quantity : 0;
+        unitCost = quantity > 0 ? costTotal / quantity : (product.cost_price ?? 0);
       } else {
-        unitCost = product.cost_price;
+        unitCost = product.cost_price ?? 0;
         costTotal = quantity * unitCost;
       }
 
